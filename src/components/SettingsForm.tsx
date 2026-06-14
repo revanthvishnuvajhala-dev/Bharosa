@@ -1,65 +1,37 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { VerificationBox } from "@/components/VerificationBox";
+import type { SettingsFormData } from "@/lib/settings";
 
 const DEFAULT_SYSTEM_PROMPT = `You are a warm, empathetic shopkeeper reaching out to lapsed customers on WhatsApp.
 Your goal is to win them back with genuine care — never pushy or salesy.
 Keep every message to one or two short lines, like a real text from a local shop owner.`;
 
-function emptyForm() {
+function toFormState(data?: SettingsFormData) {
   return {
-    business_description: "",
-    system_prompt: DEFAULT_SYSTEM_PROMPT,
-    twilio_account_sid: "",
+    business_description: data?.business_description ?? "",
+    system_prompt: data?.system_prompt || DEFAULT_SYSTEM_PROMPT,
+    twilio_account_sid: data?.twilio_account_sid ?? "",
     twilio_auth_token: "",
-    twilio_whatsapp_number: "",
+    twilio_whatsapp_number: data?.twilio_whatsapp_number ?? "",
   };
 }
 
-export function SettingsForm() {
-  const [form, setForm] = useState(emptyForm);
-  const [hasAuthToken, setHasAuthToken] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
+export function SettingsForm({
+  initialData,
+  initialError,
+}: {
+  initialData?: SettingsFormData;
+  initialError?: string;
+}) {
+  const [form, setForm] = useState(() => toFormState(initialData));
+  const [hasAuthToken, setHasAuthToken] = useState(
+    initialData?.has_auth_token ?? false,
+  );
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [savedAt, setSavedAt] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      setLoading(true);
-      setLoadError("");
-      try {
-        const res = await fetch("/api/settings", { cache: "no-store" });
-        const data = await res.json();
-        if (cancelled) return;
-        if (!res.ok) {
-          setLoadError(data.error ?? "Failed to load settings");
-          return;
-        }
-        setForm({
-          business_description: data.business_description ?? "",
-          system_prompt: data.system_prompt || DEFAULT_SYSTEM_PROMPT,
-          twilio_account_sid: data.twilio_account_sid ?? "",
-          twilio_auth_token: "",
-          twilio_whatsapp_number: data.twilio_whatsapp_number ?? "",
-        });
-        setHasAuthToken(Boolean(data.has_auth_token));
-      } catch {
-        if (!cancelled) setLoadError("Could not load settings.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -89,7 +61,6 @@ export function SettingsForm() {
         return;
       }
 
-      // Keep what the user submitted; only clear the password field
       setForm({
         business_description: payload.business_description,
         system_prompt: payload.system_prompt,
@@ -98,8 +69,7 @@ export function SettingsForm() {
         twilio_auth_token: "",
       });
       setHasAuthToken(
-        Boolean(data.has_auth_token) ||
-          Boolean(payload.twilio_auth_token),
+        Boolean(data.has_auth_token) || Boolean(payload.twilio_auth_token),
       );
       setSavedAt(new Date().toLocaleString());
       setMessage("Settings saved successfully.");
@@ -110,17 +80,17 @@ export function SettingsForm() {
     }
   }
 
-  if (loading) {
-    return <p className="text-sm text-zinc-500">Loading settings...</p>;
-  }
-
-  if (loadError) {
+  if (initialError) {
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-semibold text-zinc-900">Settings</h1>
         <div className="max-w-2xl rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           <p className="font-medium">Could not load settings</p>
-          <p className="mt-1">{loadError}</p>
+          <p className="mt-1">{initialError}</p>
+          <p className="mt-2">
+            Check <code className="rounded bg-red-100 px-1">.env.local</code> and
+            restart <code className="rounded bg-red-100 px-1">npm run dev</code>.
+          </p>
         </div>
       </div>
     );
