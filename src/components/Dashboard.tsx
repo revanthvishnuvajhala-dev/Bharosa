@@ -28,18 +28,32 @@ export function Dashboard() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<LeadStatus | "all">("all");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   const loadLeads = useCallback(async () => {
     setLoading(true);
+    setError("");
     const params = new URLSearchParams();
     if (status !== "all") params.set("status", status);
     if (search.trim()) params.set("search", search.trim());
 
-    const res = await fetch(`/api/leads?${params}`);
-    const data = await res.json();
-    setLeads(data.leads ?? []);
-    setMetrics(data.metrics ?? { total_contacted: 0, replied: 0, codes_redeemed: 0 });
-    setLoading(false);
+    try {
+      const res = await fetch(`/api/leads?${params}`);
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Failed to load leads");
+        setLeads([]);
+        return;
+      }
+      setLeads(data.leads ?? []);
+      setMetrics(
+        data.metrics ?? { total_contacted: 0, replied: 0, codes_redeemed: 0 },
+      );
+    } catch {
+      setError("Could not reach the server. Is npm run dev running?");
+    } finally {
+      setLoading(false);
+    }
   }, [search, status]);
 
   useEffect(() => {
@@ -57,6 +71,18 @@ export function Dashboard() {
       </div>
 
       <MetricsStrip metrics={metrics} />
+
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          <p className="font-medium">Setup issue</p>
+          <p className="mt-1">{error}</p>
+          <p className="mt-2 text-red-700">
+            Check that <code className="rounded bg-red-100 px-1">.env.local</code> has a
+            valid Supabase URL (no <code className="rounded bg-red-100 px-1">/rest/v1</code>{" "}
+            suffix) and that you ran the SQL migration in Supabase.
+          </p>
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
