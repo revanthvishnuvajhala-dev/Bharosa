@@ -1,68 +1,32 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { VerificationBox } from "@/components/VerificationBox";
+import type { SettingsFormData } from "@/lib/settings";
 
 const DEFAULT_SYSTEM_PROMPT = `You are a warm, empathetic shopkeeper reaching out to lapsed customers on WhatsApp.
 Your goal is to win them back with genuine care — never pushy or salesy.
 Keep every message to one or two short lines, like a real text from a local shop owner.`;
 
-export function SettingsForm() {
+export function SettingsForm({
+  initialData,
+  initialError,
+}: {
+  initialData?: SettingsFormData;
+  initialError?: string;
+}) {
   const [form, setForm] = useState({
-    business_description: "",
-    system_prompt: DEFAULT_SYSTEM_PROMPT,
-    twilio_account_sid: "",
+    business_description: initialData?.business_description ?? "",
+    system_prompt: initialData?.system_prompt || DEFAULT_SYSTEM_PROMPT,
+    twilio_account_sid: initialData?.twilio_account_sid ?? "",
     twilio_auth_token: "",
-    twilio_whatsapp_number: "",
+    twilio_whatsapp_number: initialData?.twilio_whatsapp_number ?? "",
   });
-  const [hasAuthToken, setHasAuthToken] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [hasAuthToken, setHasAuthToken] = useState(
+    initialData?.has_auth_token ?? false,
+  );
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
-  const [loadError, setLoadError] = useState("");
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      setLoading(true);
-      setLoadError("");
-
-      try {
-        const res = await fetch("/api/settings");
-        const data = await res.json();
-
-        if (cancelled) return;
-
-        if (!res.ok) {
-          setLoadError(data.error ?? "Failed to load settings");
-          return;
-        }
-
-        setForm({
-          business_description: data.business_description ?? "",
-          system_prompt: data.system_prompt || DEFAULT_SYSTEM_PROMPT,
-          twilio_account_sid: data.twilio_account_sid ?? "",
-          twilio_auth_token: "",
-          twilio_whatsapp_number: data.twilio_whatsapp_number ?? "",
-        });
-        setHasAuthToken(Boolean(data.has_auth_token));
-      } catch {
-        if (!cancelled) {
-          setLoadError(
-            "Could not reach the server. Check that npm run dev is running and your .env.local is configured.",
-          );
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -88,26 +52,19 @@ export function SettingsForm() {
     setSaving(false);
   }
 
-  if (loading) {
-    return <p className="text-sm text-zinc-500">Loading settings...</p>;
-  }
-
-  if (loadError) {
+  if (initialError) {
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-semibold text-zinc-900">Settings</h1>
         <div className="max-w-2xl rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           <p className="font-medium">Could not load settings</p>
-          <p className="mt-1">{loadError}</p>
+          <p className="mt-1">{initialError}</p>
           <p className="mt-2 text-red-700">
-            Open{" "}
-            <a href="/api/settings" className="underline" target="_blank" rel="noreferrer">
-              /api/settings
-            </a>{" "}
-            in your browser to see the raw error. Common fixes: correct{" "}
-            <code className="rounded bg-red-100 px-1">NEXT_PUBLIC_SUPABASE_URL</code> (no{" "}
-            <code className="rounded bg-red-100 px-1">/rest/v1</code>) and run the SQL
-            migration in Supabase.
+            Check <code className="rounded bg-red-100 px-1">.env.local</code> has{" "}
+            <code className="rounded bg-red-100 px-1">NEXT_PUBLIC_SUPABASE_URL</code>{" "}
+            (no <code className="rounded bg-red-100 px-1">/rest/v1</code>) and{" "}
+            <code className="rounded bg-red-100 px-1">SUPABASE_SERVICE_ROLE_KEY</code>,
+            then restart with <code className="rounded bg-red-100 px-1">npm run dev</code>.
           </p>
         </div>
       </div>
