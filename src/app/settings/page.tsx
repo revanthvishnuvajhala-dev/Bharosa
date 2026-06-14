@@ -6,5 +6,11 @@ export const dynamic = "force-dynamic";
 export default async function SettingsPage() {
   const { data, error } = await loadSettingsForUi();
 
-  return <SettingsForm initialData={data} initialError={error} />;
+  return (
+    <SettingsForm
+      key={`${data?.twilio_account_sid ?? ""}-${data?.has_auth_token ?? false}`}
+      initialData={data}
+      initialError={error}
+    />
+  );
 }
