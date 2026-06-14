@@ -8,11 +8,9 @@ const DEFAULT_SYSTEM_PROMPT = `You are a warm, empathetic shopkeeper reaching ou
 Your goal is to win them back with genuine care — never pushy or salesy.
 Keep every message to one or two short lines, like a real text from a local shop owner.`;
 
-
 function hasSavedSettings(data: SettingsFormData): boolean {
   return Boolean(
     data.business_description?.trim() ||
-      data.system_prompt?.trim() ||
       data.twilio_account_sid?.trim() ||
       data.twilio_whatsapp_number?.trim() ||
       data.has_auth_token,
@@ -141,33 +139,22 @@ export function SettingsForm({
 
   return (
     <div className="space-y-8">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-zinc-900">Settings</h1>
-          <p className="mt-1 text-sm text-zinc-500">
-            Configure your business, bot personality, and Twilio credentials.
-          </p>
-        </div>
-        {!editing && hasSavedSettings(saved) && (
-          <button
-            type="button"
-            onClick={startEditing}
-            className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-          >
-            Edit settings
-          </button>
-        )}
+      <div>
+        <h1 className="text-2xl font-semibold text-zinc-900">Settings</h1>
+        <p className="mt-1 text-sm text-zinc-500">
+          Configure your business, bot personality, and Twilio credentials.
+        </p>
       </div>
 
       {showSavedBanner && (
         <div className="max-w-2xl rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-          Settings saved. Fields below show your current configuration.
+          Settings saved. Use the button below to make changes.
         </div>
       )}
 
       <form
         onSubmit={save}
-        className="max-w-2xl space-y-5 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm"
+        className="relative z-0 max-w-2xl space-y-5 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm"
       >
         <div>
           <label className="mb-1 block text-sm font-medium text-zinc-700">
@@ -175,6 +162,7 @@ export function SettingsForm({
           </label>
           <textarea
             readOnly={!editing}
+            tabIndex={editing ? 0 : -1}
             value={editing ? form.business_description : saved.business_description}
             onChange={(e) =>
               setForm({ ...form, business_description: e.target.value })
@@ -191,6 +179,7 @@ export function SettingsForm({
           </label>
           <textarea
             readOnly={!editing}
+            tabIndex={editing ? 0 : -1}
             value={editing ? form.system_prompt : saved.system_prompt}
             onChange={(e) => setForm({ ...form, system_prompt: e.target.value })}
             rows={6}
@@ -216,6 +205,7 @@ export function SettingsForm({
           </label>
           <input
             readOnly={!editing}
+            tabIndex={editing ? 0 : -1}
             value={editing ? form.twilio_account_sid : saved.twilio_account_sid}
             onChange={(e) =>
               setForm({ ...form, twilio_account_sid: e.target.value })
@@ -231,6 +221,7 @@ export function SettingsForm({
           </label>
           <input
             readOnly={!editing}
+            tabIndex={editing ? 0 : -1}
             type={editing ? "password" : "text"}
             value={
               editing
@@ -253,6 +244,7 @@ export function SettingsForm({
           </label>
           <input
             readOnly={!editing}
+            tabIndex={editing ? 0 : -1}
             value={editing ? form.twilio_whatsapp_number : saved.twilio_whatsapp_number}
             onChange={(e) =>
               setForm({ ...form, twilio_whatsapp_number: e.target.value })
@@ -262,27 +254,45 @@ export function SettingsForm({
           />
         </div>
 
-        {editing && (
-          <div className="flex gap-2">
+        <div className="relative z-10 flex flex-col gap-2 border-t border-zinc-100 pt-5 sm:flex-row">
+          {editing ? (
+            <>
+              <button
+                type="submit"
+                disabled={saving}
+                className="cursor-pointer rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
+              >
+                {saving ? "Saving..." : "Save settings"}
+              </button>
+              {hasSavedSettings(saved) && (
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={cancelEditing}
+                  className="cursor-pointer rounded-lg border border-zinc-300 px-5 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              )}
+            </>
+          ) : hasSavedSettings(saved) ? (
+            <button
+              type="button"
+              onClick={startEditing}
+              className="w-full cursor-pointer rounded-lg border border-zinc-300 bg-white px-5 py-2.5 text-sm font-medium text-zinc-900 shadow-sm hover:bg-zinc-50 sm:w-auto"
+            >
+              Edit settings
+            </button>
+          ) : (
             <button
               type="submit"
               disabled={saving}
-              className="rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
+              className="cursor-pointer rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
             >
               {saving ? "Saving..." : "Save settings"}
             </button>
-            {hasSavedSettings(saved) && (
-              <button
-                type="button"
-                onClick={cancelEditing}
-                disabled={saving}
-                className="rounded-lg border border-zinc-300 px-5 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-              >
-                Cancel
-              </button>
-            )}
-          </div>
-        )}
+          )}
+        </div>
 
         {message && (
           <p
