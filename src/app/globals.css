@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+@theme {
+  --font-serif: "Playfair Display", Georgia, serif;
+  --font-sans: "DM Sans", system-ui, sans-serif;
+  --color-cream: #faf8f4;
+  --color-ink: #1a1814;
+  --color-ink-muted: #5c574f;
+  --color-accent: #8b3a2f;
+  --color-accent-light: #c4624f;
+  --color-sand: #e8e2d8;
+  --color-card: #ffffff;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-cream text-ink font-sans antialiased;
+  }
+}
+
+@layer utilities {
+  .editorial-title {
+    font-family: var(--font-serif);
+    letter-spacing: -0.02em;
+  }
+}
