@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { VerificationBox } from "@/components/VerificationBox";
 import type { SettingsFormData } from "@/lib/settings";
@@ -9,8 +8,8 @@ const DEFAULT_SYSTEM_PROMPT = `You are a warm, empathetic shopkeeper reaching ou
 Your goal is to win them back with genuine care — never pushy or salesy.
 Keep every message to one or two short lines, like a real text from a local shop owner.`;
 
-function hasSavedSettings(data?: SettingsFormData): boolean {
-  if (!data) return false;
+
+function hasSavedSettings(data: SettingsFormData): boolean {
   return Boolean(
     data.business_description?.trim() ||
       data.system_prompt?.trim() ||
@@ -20,6 +19,16 @@ function hasSavedSettings(data?: SettingsFormData): boolean {
   );
 }
 
+function toFormData(data?: SettingsFormData): SettingsFormData {
+  return {
+    business_description: data?.business_description ?? "",
+    system_prompt: data?.system_prompt || DEFAULT_SYSTEM_PROMPT,
+    twilio_account_sid: data?.twilio_account_sid ?? "",
+    twilio_whatsapp_number: data?.twilio_whatsapp_number ?? "",
+    has_auth_token: data?.has_auth_token ?? false,
+  };
+}
+
 export function SettingsForm({
   initialData,
   initialError,
@@ -27,24 +36,17 @@ export function SettingsForm({
   initialData?: SettingsFormData;
   initialError?: string;
 }) {
-  const router = useRouter();
-  const [saved, setSaved] = useState<SettingsFormData>(
-    initialData ?? {
-      business_description: "",
-      system_prompt: DEFAULT_SYSTEM_PROMPT,
-      twilio_account_sid: "",
-      twilio_whatsapp_number: "",
-      has_auth_token: false,
-    },
+  const [saved, setSaved] = useState<SettingsFormData>(() =>
+    toFormData(initialData),
   );
-  const [editing, setEditing] = useState(!hasSavedSettings(initialData));
-  const [form, setForm] = useState({
-    business_description: saved.business_description,
-    system_prompt: saved.system_prompt || DEFAULT_SYSTEM_PROMPT,
-    twilio_account_sid: saved.twilio_account_sid,
+  const [editing, setEditing] = useState(() => !hasSavedSettings(toFormData(initialData)));
+  const [form, setForm] = useState(() => ({
+    business_description: toFormData(initialData).business_description,
+    system_prompt: toFormData(initialData).system_prompt,
+    twilio_account_sid: toFormData(initialData).twilio_account_sid,
     twilio_auth_token: "",
-    twilio_whatsapp_number: saved.twilio_whatsapp_number,
-  });
+    twilio_whatsapp_number: toFormData(initialData).twilio_whatsapp_number,
+  }));
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -70,34 +72,50 @@ export function SettingsForm({
     setSaving(true);
     setMessage("");
 
-    const res = await fetch("/api/settings", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          business_description: form.business_description,
+          system_prompt: form.system_prompt,
+          twilio_account_sid: form.twilio_account_sid,
+          twilio_auth_token: form.twilio_auth_token,
+          twilio_whatsapp_number: form.twilio_whatsapp_number,
+        }),
+        cache: "no-store",
+      });
 
-    const data = await res.json();
+      const data = await res.json();
 
-    if (!res.ok) {
-      setMessage(data.error ?? "Failed to save");
+      if (!res.ok) {
+        setMessage(data.error ?? "Failed to save settings");
+        return;
+      }
+
+      const nextSaved: SettingsFormData = {
+        business_description: data.business_description ?? "",
+        system_prompt: data.system_prompt || DEFAULT_SYSTEM_PROMPT,
+        twilio_account_sid: data.twilio_account_sid ?? "",
+        twilio_whatsapp_number: data.twilio_whatsapp_number ?? "",
+        has_auth_token: Boolean(data.has_auth_token),
+      };
+
+      setSaved(nextSaved);
+      setForm({
+        business_description: nextSaved.business_description,
+        system_prompt: nextSaved.system_prompt,
+        twilio_account_sid: nextSaved.twilio_account_sid,
+        twilio_auth_token: "",
+        twilio_whatsapp_number: nextSaved.twilio_whatsapp_number,
+      });
+      setEditing(false);
+      setMessage("Settings saved successfully.");
+    } catch {
+      setMessage("Failed to save — could not reach the server.");
+    } finally {
       setSaving(false);
-      return;
     }
-
-    const nextSaved: SettingsFormData = {
-      business_description: form.business_description,
-      system_prompt: form.system_prompt,
-      twilio_account_sid: form.twilio_account_sid,
-      twilio_whatsapp_number: form.twilio_whatsapp_number,
-      has_auth_token: saved.has_auth_token || Boolean(form.twilio_auth_token),
-    };
-
-    setSaved(nextSaved);
-    setForm((f) => ({ ...f, twilio_auth_token: "" }));
-    setEditing(false);
-    setMessage("Settings saved.");
-    setSaving(false);
-    router.refresh();
   }
 
   const fieldClass = (readOnly: boolean) =>
@@ -119,6 +137,8 @@ export function SettingsForm({
     );
   }
 
+  const showSavedBanner = !editing && hasSavedSettings(saved);
+
   return (
     <div className="space-y-8">
       <div className="flex items-start justify-between gap-4">
@@ -139,7 +159,7 @@ export function SettingsForm({
         )}
       </div>
 
-      {!editing && hasSavedSettings(saved) && (
+      {showSavedBanner && (
         <div className="max-w-2xl rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
           Settings saved. Fields below show your current configuration.
         </div>
@@ -171,7 +191,7 @@ export function SettingsForm({
           </label>
           <textarea
             readOnly={!editing}
-            value={editing ? form.system_prompt : saved.system_prompt || DEFAULT_SYSTEM_PROMPT}
+            value={editing ? form.system_prompt : saved.system_prompt}
             onChange={(e) => setForm({ ...form, system_prompt: e.target.value })}
             rows={6}
             className={fieldClass(!editing)}
@@ -200,6 +220,7 @@ export function SettingsForm({
             onChange={(e) =>
               setForm({ ...form, twilio_account_sid: e.target.value })
             }
+            placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
             className={fieldClass(!editing)}
           />
         </div>
@@ -254,6 +275,7 @@ export function SettingsForm({
               <button
                 type="button"
                 onClick={cancelEditing}
+                disabled={saving}
                 className="rounded-lg border border-zinc-300 px-5 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
               >
                 Cancel
@@ -264,7 +286,11 @@ export function SettingsForm({
 
         {message && (
           <p
-            className={`text-sm ${message.includes("Failed") ? "text-red-600" : "text-emerald-700"}`}
+            className={`text-sm ${
+              message.includes("Failed") || message.includes("could not")
+                ? "text-red-600"
+                : "text-emerald-700"
+            }`}
           >
             {message}
           </p>
