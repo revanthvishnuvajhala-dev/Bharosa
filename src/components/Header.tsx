@@ -13,7 +13,6 @@ export function Header() {
     router.push("/login");
     router.refresh();
   }
-
   const navItems = [
     { href: "/feed", label: "Trends", icon: TrendingUp },
     { href: "/wishlist", label: "Wishlist", icon: Heart },
