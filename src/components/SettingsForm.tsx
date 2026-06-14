@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { VerificationBox } from "@/components/VerificationBox";
-import type { SettingsFormData } from "@/lib/settings";
 
 const DEFAULT_SYSTEM_PROMPT = `You are a warm, empathetic shopkeeper reaching out to lapsed customers on WhatsApp.
 Your goal is to win them back with genuine care — never pushy or salesy.
