@@ -19,11 +19,26 @@ export function SettingsForm() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
-    fetch("/api/settings")
-      .then((r) => r.json())
-      .then((data) => {
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      setLoadError("");
+
+      try {
+        const res = await fetch("/api/settings");
+        const data = await res.json();
+
+        if (cancelled) return;
+
+        if (!res.ok) {
+          setLoadError(data.error ?? "Failed to load settings");
+          return;
+        }
+
         setForm({
           business_description: data.business_description ?? "",
           system_prompt: data.system_prompt || DEFAULT_SYSTEM_PROMPT,
@@ -32,9 +47,21 @@ export function SettingsForm() {
           twilio_whatsapp_number: data.twilio_whatsapp_number ?? "",
         });
         setHasAuthToken(Boolean(data.has_auth_token));
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+      } catch {
+        if (!cancelled) {
+          setLoadError(
+            "Could not reach the server. Check that npm run dev is running and your .env.local is configured.",
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function save(e: React.FormEvent) {
@@ -63,6 +90,28 @@ export function SettingsForm() {
 
   if (loading) {
     return <p className="text-sm text-zinc-500">Loading settings...</p>;
+  }
+
+  if (loadError) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-2xl font-semibold text-zinc-900">Settings</h1>
+        <div className="max-w-2xl rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          <p className="font-medium">Could not load settings</p>
+          <p className="mt-1">{loadError}</p>
+          <p className="mt-2 text-red-700">
+            Open{" "}
+            <a href="/api/settings" className="underline" target="_blank" rel="noreferrer">
+              /api/settings
+            </a>{" "}
+            in your browser to see the raw error. Common fixes: correct{" "}
+            <code className="rounded bg-red-100 px-1">NEXT_PUBLIC_SUPABASE_URL</code> (no{" "}
+            <code className="rounded bg-red-100 px-1">/rest/v1</code>) and run the SQL
+            migration in Supabase.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return (

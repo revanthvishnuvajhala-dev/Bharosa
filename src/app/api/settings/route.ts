@@ -8,7 +8,7 @@ export async function GET() {
     const { data, error } = await supabase
       .from("settings")
       .select(
-        "id, business_description, system_prompt, twilio_account_sid, twilio_whatsapp_number, updated_at",
+        "id, business_description, system_prompt, twilio_account_sid, twilio_auth_token, twilio_whatsapp_number, updated_at",
       )
       .eq("id", SETTINGS_ID)
       .single();
@@ -16,16 +16,13 @@ export async function GET() {
     if (error) throw error;
 
     return NextResponse.json({
-      ...data,
-      has_auth_token: Boolean(
-        (
-          await supabase
-            .from("settings")
-            .select("twilio_auth_token")
-            .eq("id", SETTINGS_ID)
-            .single()
-        ).data?.twilio_auth_token,
-      ),
+      id: data.id,
+      business_description: data.business_description,
+      system_prompt: data.system_prompt,
+      twilio_account_sid: data.twilio_account_sid,
+      twilio_whatsapp_number: data.twilio_whatsapp_number,
+      updated_at: data.updated_at,
+      has_auth_token: Boolean(data.twilio_auth_token),
     });
   } catch (error) {
     return NextResponse.json(
