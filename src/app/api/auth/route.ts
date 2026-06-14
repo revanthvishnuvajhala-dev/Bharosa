@@ -10,7 +10,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Phone required" }, { status: 400 });
   }
 
-  const normalizedPhone = phone.replace(/\D/g, "");
+  let normalizedPhone = phone.replace(/\D/g, "");
+  if (normalizedPhone.startsWith("91") && normalizedPhone.length === 12) {
+    normalizedPhone = normalizedPhone.slice(2);
+  }
+
+  if (normalizedPhone.length !== 10) {
+    return NextResponse.json(
+      { error: "Enter a valid 10-digit Indian mobile number." },
+      { status: 400 }
+    );
+  }
 
   if (isSupabaseConfigured()) {
     const supabase = await createClient();
@@ -54,9 +64,12 @@ export async function POST(request: NextRequest) {
   }
 
   const response = NextResponse.json({ step: "done" });
+  const isSecure =
+    request.headers.get("x-forwarded-proto") === "https" ||
+    request.url.startsWith("https://");
   response.cookies.set("demo_session", `retailer-${normalizedPhone}`, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: isSecure,
     sameSite: "lax",
     maxAge: 60 * 60 * 24 * 30,
     path: "/",

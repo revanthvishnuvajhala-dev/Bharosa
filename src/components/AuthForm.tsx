@@ -3,6 +3,18 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+function normalizePhone(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  // Strip leading India country code if pasted with +91
+  return digits.startsWith("91") && digits.length === 12
+    ? digits.slice(2)
+    : digits.slice(0, 10);
+}
+
+function normalizeOtp(value: string): string {
+  return value.replace(/\D/g, "").slice(0, 6);
+}
+
 export function AuthForm() {
   const router = useRouter();
   const [phone, setPhone] = useState("");
@@ -11,22 +23,53 @@ export function AuthForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  function handlePhoneChange(value: string) {
+    setPhone(normalizePhone(value));
+    setError("");
+  }
+
+  function handleOtpChange(value: string) {
+    setOtp(normalizeOtp(value));
+    setError("");
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError("");
 
+    const normalizedPhone = normalizePhone(phone);
+
+    if (step === "phone" && normalizedPhone.length !== 10) {
+      setError("Enter a valid 10-digit Indian mobile number.");
+      setLoading(false);
+      return;
+    }
+
+    if (step === "otp" && otp.length !== 6) {
+      setError("Enter the 6-digit OTP.");
+      setLoading(false);
+      return;
+    }
+
     try {
       const res = await fetch("/api/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({
-          phone,
+          phone: normalizedPhone,
           otp: step === "otp" ? otp : undefined,
         }),
       });
 
-      const data = await res.json();
+      let data: { step?: string; error?: string };
+      try {
+        data = await res.json();
+      } catch {
+        setError("Unexpected server response. Please try again.");
+        return;
+      }
 
       if (!res.ok) {
         setError(data.error ?? "Something went wrong");
@@ -34,12 +77,18 @@ export function AuthForm() {
       }
 
       if (data.step === "otp") {
+        setPhone(normalizedPhone);
         setStep("otp");
         return;
       }
 
-      router.push("/feed");
-      router.refresh();
+      if (data.step === "done") {
+        router.push("/feed");
+        router.refresh();
+        return;
+      }
+
+      setError("Unexpected response. Please try again.");
     } catch {
       setError("Network error. Please try again.");
     } finally {
@@ -65,18 +114,23 @@ export function AuthForm() {
               id="phone"
               type="tel"
               inputMode="numeric"
-              placeholder="98765 43210"
+              autoComplete="tel"
+              placeholder="9876543210"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              onChange={(e) => handlePhoneChange(e.target.value)}
               className="flex-1 px-4 py-3 rounded-r-lg border border-sand bg-white text-ink placeholder:text-ink-muted/50 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
               required
-              minLength={10}
-              maxLength={10}
             />
           </div>
+          <p className="mt-2 text-xs text-ink-muted">
+            {phone.length}/10 digits
+          </p>
         </div>
       ) : (
         <div>
+          <p className="text-sm text-green-700 bg-green-50 px-4 py-2 rounded-lg mb-4">
+            OTP sent to +91 {phone}. Enter the code below.
+          </p>
           <label
             htmlFor="otp"
             className="block text-sm font-medium text-ink-muted mb-2"
@@ -87,13 +141,12 @@ export function AuthForm() {
             id="otp"
             type="text"
             inputMode="numeric"
+            autoComplete="one-time-code"
             placeholder="6-digit code"
             value={otp}
-            onChange={(e) => setOtp(e.target.value)}
+            onChange={(e) => handleOtpChange(e.target.value)}
             className="w-full px-4 py-3 rounded-lg border border-sand bg-white text-ink text-center text-2xl tracking-[0.5em] placeholder:text-ink-muted/50 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
             required
-            minLength={6}
-            maxLength={6}
           />
           <p className="mt-2 text-xs text-ink-muted">
             Demo mode: use OTP <span className="font-mono font-medium">123456</span>
