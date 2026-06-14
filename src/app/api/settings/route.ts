@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/server";
 import { SETTINGS_ID } from "@/lib/types";
 
@@ -83,6 +84,8 @@ export async function PUT(request: NextRequest) {
       .single();
 
     if (error) throw error;
+
+    revalidatePath("/settings");
 
     return NextResponse.json({
       id: data.id,
