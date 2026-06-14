@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { createLead } from "@/lib/leads";
+import { normalizeLeads } from "@/lib/normalize";
 import type { LeadStatus } from "@/lib/types";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
@@ -38,7 +41,7 @@ export async function GET(request: NextRequest) {
       .eq("status", "code_redeemed");
 
     return NextResponse.json({
-      leads: leads ?? [],
+      leads: normalizeLeads(leads ?? []),
       metrics: {
         total_contacted: total_contacted ?? 0,
         replied: replied ?? 0,
@@ -75,7 +78,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
 
-    return NextResponse.json(result.lead, { status: 201 });
+    return NextResponse.json(
+      {
+        id: result.lead!.id,
+        send_status: result.send_status,
+      },
+      { status: 201 },
+    );
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to create lead" },

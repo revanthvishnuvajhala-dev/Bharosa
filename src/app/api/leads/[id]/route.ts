@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { findOrCreateOffer, getLeadMessages } from "@/lib/leads";
+import { normalizeLeadOffer } from "@/lib/normalize";
 import { normalizeMobile } from "@/lib/phone";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(
   _request: NextRequest,
@@ -23,7 +26,10 @@ export async function GET(
 
     const messages = await getLeadMessages(id);
 
-    return NextResponse.json({ lead, messages });
+    return NextResponse.json({
+      lead: normalizeLeadOffer(lead),
+      messages,
+    });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to load lead" },

@@ -38,7 +38,7 @@ export function Dashboard() {
     if (search.trim()) params.set("search", search.trim());
 
     try {
-      const res = await fetch(`/api/leads?${params}`);
+      const res = await fetch(`/api/leads?${params}`, { cache: "no-store" });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error ?? "Failed to load leads");
@@ -61,6 +61,11 @@ export function Dashboard() {
     return () => clearTimeout(timer);
   }, [loadLeads]);
 
+  const emptyMessage =
+    status !== "all" || search.trim()
+      ? `No leads match${status !== "all" ? ` "${LEAD_STATUS_LABELS[status]}"` : ""}${search.trim() ? ` for "${search.trim()}"` : ""}.`
+      : null;
+
   return (
     <div className="space-y-6">
       <div>
@@ -76,11 +81,6 @@ export function Dashboard() {
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           <p className="font-medium">Setup issue</p>
           <p className="mt-1">{error}</p>
-          <p className="mt-2 text-red-700">
-            Check that <code className="rounded bg-red-100 px-1">.env.local</code> has a
-            valid Supabase URL (no <code className="rounded bg-red-100 px-1">/rest/v1</code>{" "}
-            suffix) and that you ran the SQL migration in Supabase.
-          </p>
         </div>
       )}
 
@@ -100,7 +100,7 @@ export function Dashboard() {
                   key={filter}
                   type="button"
                   onClick={() => setStatus(filter)}
-                  className={`rounded-full px-3 py-1 text-xs font-medium ${
+                  className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
                     status === filter
                       ? "bg-zinc-900 text-white"
                       : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
@@ -136,10 +136,14 @@ export function Dashboard() {
                 ) : leads.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-4 py-8 text-center text-sm text-zinc-500">
-                      No leads yet.{" "}
-                      <Link href="/leads/new" className="text-zinc-900 underline">
-                        Add your first lead
-                      </Link>
+                      {emptyMessage ?? (
+                        <>
+                          No leads yet.{" "}
+                          <Link href="/leads/new" className="text-zinc-900 underline">
+                            Add your first lead
+                          </Link>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ) : (

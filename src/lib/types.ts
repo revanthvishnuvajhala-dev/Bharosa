@@ -1,3 +1,5 @@
+export type SendStatus = "sent" | "queued" | "failed" | "skipped";
+
 export type LeadStatus =
   | "sent"
   | "replied"

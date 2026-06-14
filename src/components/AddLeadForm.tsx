@@ -3,7 +3,32 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import type { Offer } from "@/lib/types";
+import type { Offer, SendStatus } from "@/lib/types";
+
+type SubmitPhase = "idle" | "saving" | "done" | "error";
+
+const SEND_STATUS_MESSAGES: Record<SendStatus, { title: string; body: string; tone: string }> = {
+  sent: {
+    title: "Message successfully sent",
+    body: "The WhatsApp opener was delivered to the customer.",
+    tone: "border-emerald-200 bg-emerald-50 text-emerald-800",
+  },
+  queued: {
+    title: "Message queued",
+    body: "Outside quiet hours (10am–7pm IST). The opener will send automatically when the window opens.",
+    tone: "border-amber-200 bg-amber-50 text-amber-800",
+  },
+  failed: {
+    title: "Message failed to send",
+    body: "The lead was saved but WhatsApp delivery failed. Open the lead and tap Retry send.",
+    tone: "border-red-200 bg-red-50 text-red-800",
+  },
+  skipped: {
+    title: "Lead saved — message not sent",
+    body: "Configure Twilio credentials in Settings and ensure your Anthropic API key is set.",
+    tone: "border-amber-200 bg-amber-50 text-amber-800",
+  },
+};
 
 export function AddLeadForm() {
   const router = useRouter();
@@ -18,8 +43,10 @@ export function AddLeadForm() {
     create_new_offer: false,
   });
   const [csvFile, setCsvFile] = useState<File | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [phase, setPhase] = useState<SubmitPhase>("idle");
   const [error, setError] = useState("");
+  const [sendStatus, setSendStatus] = useState<SendStatus | null>(null);
+  const [createdLeadId, setCreatedLeadId] = useState<string | null>(null);
   const [importReport, setImportReport] = useState<{
     imported: number;
     duplicates: { row: number; mobile: string }[];
@@ -27,16 +54,28 @@ export function AddLeadForm() {
   } | null>(null);
 
   useEffect(() => {
-    fetch("/api/offers")
+    fetch("/api/offers", { cache: "no-store" })
       .then((r) => r.json())
       .then(setOffers)
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    if (phase !== "done" || !createdLeadId) return;
+
+    const timer = setTimeout(() => {
+      router.push(`/leads/${createdLeadId}`);
+    }, 2500);
+
+    return () => clearTimeout(timer);
+  }, [phase, createdLeadId, router]);
+
   async function submitSingle(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
+    setPhase("saving");
     setError("");
+    setSendStatus(null);
+    setCreatedLeadId(null);
 
     const res = await fetch("/api/leads", {
       method: "POST",
@@ -57,18 +96,20 @@ export function AddLeadForm() {
           ? "This mobile number already has an existing chat."
           : data.error ?? "Failed to add lead",
       );
-      setLoading(false);
+      setPhase("error");
       return;
     }
 
-    router.push(`/leads/${data.id}`);
+    setCreatedLeadId(data.id);
+    setSendStatus(data.send_status ?? "skipped");
+    setPhase("done");
   }
 
   async function submitCsv(e: React.FormEvent) {
     e.preventDefault();
     if (!csvFile) return;
 
-    setLoading(true);
+    setPhase("saving");
     setError("");
     setImportReport(null);
 
@@ -80,13 +121,15 @@ export function AddLeadForm() {
 
     if (!res.ok) {
       setError(data.error ?? "Import failed");
-      setLoading(false);
+      setPhase("error");
       return;
     }
 
     setImportReport(data);
-    setLoading(false);
+    setPhase("idle");
   }
+
+  const isSubmitting = phase === "saving";
 
   return (
     <div className="space-y-6">
@@ -100,12 +143,30 @@ export function AddLeadForm() {
         </p>
       </div>
 
+      {phase === "saving" && (
+        <div className="max-w-lg rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          <p className="font-medium">Saving customer details…</p>
+          <p className="mt-1">Generating opener and sending WhatsApp message.</p>
+        </div>
+      )}
+
+      {phase === "done" && sendStatus && (
+        <div
+          className={`max-w-lg rounded-lg border px-4 py-3 text-sm ${SEND_STATUS_MESSAGES[sendStatus].tone}`}
+        >
+          <p className="font-medium">{SEND_STATUS_MESSAGES[sendStatus].title}</p>
+          <p className="mt-1">{SEND_STATUS_MESSAGES[sendStatus].body}</p>
+          <p className="mt-2 text-xs opacity-80">Redirecting to lead details…</p>
+        </div>
+      )}
+
       <div className="flex gap-2">
         {(["single", "csv"] as const).map((m) => (
           <button
             key={m}
             type="button"
             onClick={() => setMode(m)}
+            disabled={isSubmitting}
             className={`rounded-lg px-4 py-2 text-sm font-medium ${
               mode === m
                 ? "bg-zinc-900 text-white"
@@ -130,9 +191,10 @@ export function AddLeadForm() {
             </label>
             <input
               required
+              disabled={isSubmitting}
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500 disabled:bg-zinc-50"
             />
           </div>
           <div>
@@ -141,10 +203,11 @@ export function AddLeadForm() {
             </label>
             <input
               required
+              disabled={isSubmitting}
               value={form.mobile}
               onChange={(e) => setForm({ ...form, mobile: e.target.value })}
               placeholder="+91..."
-              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500 disabled:bg-zinc-50"
             />
           </div>
           <div>
@@ -152,9 +215,10 @@ export function AddLeadForm() {
               Last purchase
             </label>
             <input
+              disabled={isSubmitting}
               value={form.last_purchase}
               onChange={(e) => setForm({ ...form, last_purchase: e.target.value })}
-              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500 disabled:bg-zinc-50"
             />
           </div>
           <div>
@@ -162,10 +226,11 @@ export function AddLeadForm() {
               Context
             </label>
             <textarea
+              disabled={isSubmitting}
               value={form.context}
               onChange={(e) => setForm({ ...form, context: e.target.value })}
               rows={3}
-              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500 disabled:bg-zinc-50"
             />
           </div>
           <div>
@@ -174,6 +239,7 @@ export function AddLeadForm() {
             </label>
             {!form.create_new_offer ? (
               <select
+                disabled={isSubmitting}
                 value={form.offer_text}
                 onChange={(e) => {
                   if (e.target.value === "__new__") {
@@ -182,7 +248,7 @@ export function AddLeadForm() {
                     setForm({ ...form, offer_text: e.target.value });
                   }
                 }}
-                className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+                className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500 disabled:bg-zinc-50"
               >
                 <option value="">No offer</option>
                 {offers.map((o) => (
@@ -195,10 +261,11 @@ export function AddLeadForm() {
             ) : (
               <div className="flex gap-2">
                 <input
+                  disabled={isSubmitting}
                   value={form.offer_text}
                   onChange={(e) => setForm({ ...form, offer_text: e.target.value })}
                   placeholder="Describe the offer..."
-                  className="flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+                  className="flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500 disabled:bg-zinc-50"
                 />
                 <button
                   type="button"
@@ -214,10 +281,10 @@ export function AddLeadForm() {
           </div>
           <button
             type="submit"
-            disabled={loading}
+            disabled={isSubmitting || phase === "done"}
             className="w-full rounded-lg bg-zinc-900 py-2.5 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
           >
-            {loading ? "Adding..." : "Add lead & send opener"}
+            {isSubmitting ? "Saving & sending…" : "Add lead & send opener"}
           </button>
         </form>
       ) : (
@@ -231,15 +298,16 @@ export function AddLeadForm() {
           <input
             type="file"
             accept=".csv"
+            disabled={isSubmitting}
             onChange={(e) => setCsvFile(e.target.files?.[0] ?? null)}
             className="w-full text-sm"
           />
           <button
             type="submit"
-            disabled={loading || !csvFile}
+            disabled={isSubmitting || !csvFile}
             className="w-full rounded-lg bg-zinc-900 py-2.5 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
           >
-            {loading ? "Importing..." : "Upload & import"}
+            {isSubmitting ? "Importing..." : "Upload & import"}
           </button>
 
           {importReport && (

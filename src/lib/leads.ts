@@ -7,7 +7,7 @@ import {
 import { isWithinQuietHours } from "@/lib/quiet-hours";
 import { normalizeMobile } from "@/lib/phone";
 import { sendWhatsAppMessage } from "@/lib/twilio";
-import type { LeadStatus, LeadWithOffer, Settings } from "@/lib/types";
+import type { LeadStatus, LeadWithOffer, SendStatus, Settings } from "@/lib/types";
 
 const SETTINGS_ID = "00000000-0000-0000-0000-000000000001";
 
@@ -102,7 +102,7 @@ export async function sendOrQueueMessage(
   settings: Settings,
   to: string,
   statusUpdate?: LeadStatus,
-): Promise<void> {
+): Promise<SendStatus> {
   const supabase = createServiceClient();
 
   if (!isWithinQuietHours()) {
@@ -123,7 +123,7 @@ export async function sendOrQueueMessage(
         .update({ status: statusUpdate, updated_at: new Date().toISOString() })
         .eq("id", leadId);
     }
-    return;
+    return "queued";
   }
 
   const { data: msg } = await supabase
@@ -137,7 +137,7 @@ export async function sendOrQueueMessage(
     .select("id")
     .single();
 
-  if (!msg) return;
+  if (!msg) return "failed";
 
   const sent = await dispatchOutboundMessage(
     leadId,
@@ -153,14 +153,18 @@ export async function sendOrQueueMessage(
       .update({ status: statusUpdate, updated_at: new Date().toISOString() })
       .eq("id", leadId);
   }
+
+  return sent ? "sent" : "failed";
 }
 
-export async function fireOpener(leadId: string): Promise<void> {
+export async function fireOpener(leadId: string): Promise<SendStatus> {
   const settings = await getSettings();
-  if (!settings?.twilio_account_sid || !settings.twilio_auth_token) return;
+  if (!settings?.twilio_account_sid || !settings.twilio_auth_token) {
+    return "skipped";
+  }
 
   const lead = await getLeadWithOffer(leadId);
-  if (!lead) return;
+  if (!lead) return "skipped";
 
   const result = await generateConversationTurn(
     settings,
@@ -169,7 +173,7 @@ export async function fireOpener(leadId: string): Promise<void> {
     { isOpener: true },
   );
 
-  if (!result.reply) return;
+  if (!result.reply) return "skipped";
 
   const updates: Record<string, unknown> = {
     summary: result.summary,
@@ -185,16 +189,20 @@ export async function fireOpener(leadId: string): Promise<void> {
   await supabase.from("leads").update(updates).eq("id", leadId);
 
   if (!result.should_escalate) {
-    await sendOrQueueMessage(
+    return sendOrQueueMessage(
       leadId,
       result.reply,
       settings,
       lead.mobile,
       "sent",
     );
-  } else if (result.reply) {
-    await sendOrQueueMessage(leadId, result.reply, settings, lead.mobile);
   }
+
+  if (result.reply) {
+    return sendOrQueueMessage(leadId, result.reply, settings, lead.mobile);
+  }
+
+  return "skipped";
 }
 
 export async function handleInboundMessage(
@@ -319,6 +327,7 @@ export interface CreateLeadInput {
 export interface CreateLeadResult {
   success: boolean;
   lead?: { id: string };
+  send_status?: SendStatus;
   duplicate?: boolean;
   error?: string;
 }
@@ -372,9 +381,9 @@ export async function createLead(
     return { success: false, error: error?.message ?? "Failed to create lead" };
   }
 
-  await fireOpener(lead.id);
+  const send_status = await fireOpener(lead.id);
 
-  return { success: true, lead: { id: lead.id } };
+  return { success: true, lead: { id: lead.id }, send_status };
 }
 
 export async function dispatchPendingMessages(): Promise<number> {

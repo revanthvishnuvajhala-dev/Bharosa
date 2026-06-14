@@ -7,11 +7,11 @@ import { StatusBadge } from "@/components/StatusBadge";
 import type { LeadWithOffer, Message } from "@/lib/types";
 
 export function LeadDetail({
-  id,
+  leadId,
   initialLead,
   initialMessages,
 }: {
-  id?: string;
+  leadId: string;
   initialLead: LeadWithOffer;
   initialMessages: Message[];
 }) {
@@ -26,34 +26,38 @@ export function LeadDetail({
     context: initialLead.context ?? "",
     offer_text: initialLead.offers?.text ?? "",
   });
-  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState("");
 
   async function load() {
-    const leadId = id ?? lead.id;
-    setLoading(true);
-    const res = await fetch(`/api/leads/${leadId}`);
-    if (!res.ok) {
-      setError("Lead not found");
-      setLoading(false);
-      return;
+    setRefreshing(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/leads/${leadId}`, { cache: "no-store" });
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.error ?? "Lead not found");
+        return;
+      }
+      const data = await res.json();
+      setLead(data.lead);
+      setMessages(data.messages ?? []);
+      setForm({
+        name: data.lead.name,
+        mobile: data.lead.mobile,
+        last_purchase: data.lead.last_purchase ?? "",
+        context: data.lead.context ?? "",
+        offer_text: data.lead.offers?.text ?? "",
+      });
+    } catch {
+      setError("Could not refresh lead data.");
+    } finally {
+      setRefreshing(false);
     }
-    const data = await res.json();
-    setLead(data.lead);
-    setMessages(data.messages ?? []);
-    setForm({
-      name: data.lead.name,
-      mobile: data.lead.mobile,
-      last_purchase: data.lead.last_purchase ?? "",
-      context: data.lead.context ?? "",
-      offer_text: data.lead.offers?.text ?? "",
-    });
-    setLoading(false);
   }
 
   async function save() {
-    const leadId = id ?? lead.id;
     setActionLoading(true);
     setError("");
     const res = await fetch(`/api/leads/${leadId}`, {
@@ -74,14 +78,12 @@ export function LeadDetail({
 
   async function remove() {
     if (!confirm("Delete this lead and all messages?")) return;
-    const leadId = id ?? lead.id;
     setActionLoading(true);
     await fetch(`/api/leads/${leadId}`, { method: "DELETE" });
     router.push("/");
   }
 
   async function retry() {
-    const leadId = id ?? lead.id;
     setActionLoading(true);
     const res = await fetch(`/api/leads/${leadId}/retry`, { method: "POST" });
     if (!res.ok) {
@@ -94,7 +96,6 @@ export function LeadDetail({
   }
 
   async function redeem() {
-    const leadId = id ?? lead.id;
     setActionLoading(true);
     const res = await fetch(`/api/leads/${leadId}/redeem`, { method: "POST" });
     if (!res.ok) {
@@ -106,16 +107,11 @@ export function LeadDetail({
     setActionLoading(false);
   }
 
-  if (!lead) {
-    return <p className="text-sm text-red-600">{error || "Lead not found"}</p>;
-  }
-
-  if (loading) {
-    return <p className="text-sm text-zinc-500">Refreshing...</p>;
-  }
-
   const visibleMessages = messages.filter(
     (m) => m.sent_at || m.direction === "inbound",
+  );
+  const pendingOutbound = messages.some(
+    (m) => m.direction === "outbound" && !m.sent_at,
   );
 
   return (
@@ -132,6 +128,9 @@ export function LeadDetail({
               <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800 ring-1 ring-amber-600/20 ring-inset">
                 Escalated
               </span>
+            )}
+            {refreshing && (
+              <span className="text-xs text-zinc-400">Refreshing…</span>
             )}
           </div>
         </div>
@@ -173,6 +172,18 @@ export function LeadDetail({
           </button>
         </div>
       </div>
+
+      {pendingOutbound && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          WhatsApp opener is queued and will send during quiet hours (10am–7pm IST).
+        </div>
+      )}
+
+      {lead.status === "sent" && !pendingOutbound && visibleMessages.length > 0 && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          Message successfully sent.
+        </div>
+      )}
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
@@ -256,7 +267,11 @@ export function LeadDetail({
             </div>
             <div className="max-h-[32rem] space-y-3 overflow-y-auto p-5">
               {visibleMessages.length === 0 ? (
-                <p className="text-sm text-zinc-500">No messages yet.</p>
+                <p className="text-sm text-zinc-500">
+                  {pendingOutbound
+                    ? "Opener queued — not sent yet."
+                    : "No messages yet."}
+                </p>
               ) : (
                 visibleMessages.map((msg) => (
                   <div

@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { VerificationBox } from "@/components/VerificationBox";
 import type { SettingsFormData } from "@/lib/settings";
@@ -8,6 +9,17 @@ const DEFAULT_SYSTEM_PROMPT = `You are a warm, empathetic shopkeeper reaching ou
 Your goal is to win them back with genuine care — never pushy or salesy.
 Keep every message to one or two short lines, like a real text from a local shop owner.`;
 
+function hasSavedSettings(data?: SettingsFormData): boolean {
+  if (!data) return false;
+  return Boolean(
+    data.business_description?.trim() ||
+      data.system_prompt?.trim() ||
+      data.twilio_account_sid?.trim() ||
+      data.twilio_whatsapp_number?.trim() ||
+      data.has_auth_token,
+  );
+}
+
 export function SettingsForm({
   initialData,
   initialError,
@@ -15,18 +27,43 @@ export function SettingsForm({
   initialData?: SettingsFormData;
   initialError?: string;
 }) {
-  const [form, setForm] = useState({
-    business_description: initialData?.business_description ?? "",
-    system_prompt: initialData?.system_prompt || DEFAULT_SYSTEM_PROMPT,
-    twilio_account_sid: initialData?.twilio_account_sid ?? "",
-    twilio_auth_token: "",
-    twilio_whatsapp_number: initialData?.twilio_whatsapp_number ?? "",
-  });
-  const [hasAuthToken, setHasAuthToken] = useState(
-    initialData?.has_auth_token ?? false,
+  const router = useRouter();
+  const [saved, setSaved] = useState<SettingsFormData>(
+    initialData ?? {
+      business_description: "",
+      system_prompt: DEFAULT_SYSTEM_PROMPT,
+      twilio_account_sid: "",
+      twilio_whatsapp_number: "",
+      has_auth_token: false,
+    },
   );
+  const [editing, setEditing] = useState(!hasSavedSettings(initialData));
+  const [form, setForm] = useState({
+    business_description: saved.business_description,
+    system_prompt: saved.system_prompt || DEFAULT_SYSTEM_PROMPT,
+    twilio_account_sid: saved.twilio_account_sid,
+    twilio_auth_token: "",
+    twilio_whatsapp_number: saved.twilio_whatsapp_number,
+  });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+
+  function startEditing() {
+    setForm({
+      business_description: saved.business_description,
+      system_prompt: saved.system_prompt || DEFAULT_SYSTEM_PROMPT,
+      twilio_account_sid: saved.twilio_account_sid,
+      twilio_auth_token: "",
+      twilio_whatsapp_number: saved.twilio_whatsapp_number,
+    });
+    setMessage("");
+    setEditing(true);
+  }
+
+  function cancelEditing() {
+    setMessage("");
+    setEditing(false);
+  }
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -39,18 +76,36 @@ export function SettingsForm({
       body: JSON.stringify(form),
     });
 
+    const data = await res.json();
+
     if (!res.ok) {
-      const data = await res.json();
       setMessage(data.error ?? "Failed to save");
       setSaving(false);
       return;
     }
 
-    setMessage("Settings saved.");
-    setHasAuthToken(hasAuthToken || Boolean(form.twilio_auth_token));
+    const nextSaved: SettingsFormData = {
+      business_description: form.business_description,
+      system_prompt: form.system_prompt,
+      twilio_account_sid: form.twilio_account_sid,
+      twilio_whatsapp_number: form.twilio_whatsapp_number,
+      has_auth_token: saved.has_auth_token || Boolean(form.twilio_auth_token),
+    };
+
+    setSaved(nextSaved);
     setForm((f) => ({ ...f, twilio_auth_token: "" }));
+    setEditing(false);
+    setMessage("Settings saved.");
     setSaving(false);
+    router.refresh();
   }
+
+  const fieldClass = (readOnly: boolean) =>
+    `w-full rounded-lg border px-3 py-2 text-sm outline-none ${
+      readOnly
+        ? "cursor-default border-zinc-200 bg-zinc-50 text-zinc-600"
+        : "border-zinc-300 focus:border-zinc-500"
+    }`;
 
   if (initialError) {
     return (
@@ -59,13 +114,6 @@ export function SettingsForm({
         <div className="max-w-2xl rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           <p className="font-medium">Could not load settings</p>
           <p className="mt-1">{initialError}</p>
-          <p className="mt-2 text-red-700">
-            Check <code className="rounded bg-red-100 px-1">.env.local</code> has{" "}
-            <code className="rounded bg-red-100 px-1">NEXT_PUBLIC_SUPABASE_URL</code>{" "}
-            (no <code className="rounded bg-red-100 px-1">/rest/v1</code>) and{" "}
-            <code className="rounded bg-red-100 px-1">SUPABASE_SERVICE_ROLE_KEY</code>,
-            then restart with <code className="rounded bg-red-100 px-1">npm run dev</code>.
-          </p>
         </div>
       </div>
     );
@@ -73,12 +121,29 @@ export function SettingsForm({
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-semibold text-zinc-900">Settings</h1>
-        <p className="mt-1 text-sm text-zinc-500">
-          Configure your business, bot personality, and Twilio credentials.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-zinc-900">Settings</h1>
+          <p className="mt-1 text-sm text-zinc-500">
+            Configure your business, bot personality, and Twilio credentials.
+          </p>
+        </div>
+        {!editing && hasSavedSettings(saved) && (
+          <button
+            type="button"
+            onClick={startEditing}
+            className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+          >
+            Edit settings
+          </button>
+        )}
       </div>
+
+      {!editing && hasSavedSettings(saved) && (
+        <div className="max-w-2xl rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          Settings saved. Fields below show your current configuration.
+        </div>
+      )}
 
       <form
         onSubmit={save}
@@ -89,13 +154,14 @@ export function SettingsForm({
             Business description
           </label>
           <textarea
-            value={form.business_description}
+            readOnly={!editing}
+            value={editing ? form.business_description : saved.business_description}
             onChange={(e) =>
               setForm({ ...form, business_description: e.target.value })
             }
             rows={4}
             placeholder="What does your business do? What makes it special?"
-            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+            className={fieldClass(!editing)}
           />
         </div>
 
@@ -104,10 +170,11 @@ export function SettingsForm({
             System prompt
           </label>
           <textarea
-            value={form.system_prompt}
+            readOnly={!editing}
+            value={editing ? form.system_prompt : saved.system_prompt || DEFAULT_SYSTEM_PROMPT}
             onChange={(e) => setForm({ ...form, system_prompt: e.target.value })}
             rows={6}
-            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+            className={fieldClass(!editing)}
           />
         </div>
 
@@ -128,26 +195,34 @@ export function SettingsForm({
             Account SID
           </label>
           <input
-            value={form.twilio_account_sid}
+            readOnly={!editing}
+            value={editing ? form.twilio_account_sid : saved.twilio_account_sid}
             onChange={(e) =>
               setForm({ ...form, twilio_account_sid: e.target.value })
             }
-            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+            className={fieldClass(!editing)}
           />
         </div>
 
         <div>
           <label className="mb-1 block text-sm font-medium text-zinc-700">
-            Auth token {hasAuthToken && "(saved — leave blank to keep)"}
+            Auth token
           </label>
           <input
-            type="password"
-            value={form.twilio_auth_token}
+            readOnly={!editing}
+            type={editing ? "password" : "text"}
+            value={
+              editing
+                ? form.twilio_auth_token
+                : saved.has_auth_token
+                  ? "••••••••••••"
+                  : ""
+            }
             onChange={(e) =>
               setForm({ ...form, twilio_auth_token: e.target.value })
             }
-            placeholder={hasAuthToken ? "••••••••" : ""}
-            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+            placeholder={editing && saved.has_auth_token ? "Leave blank to keep saved token" : ""}
+            className={fieldClass(!editing)}
           />
         </div>
 
@@ -156,22 +231,36 @@ export function SettingsForm({
             WhatsApp number
           </label>
           <input
-            value={form.twilio_whatsapp_number}
+            readOnly={!editing}
+            value={editing ? form.twilio_whatsapp_number : saved.twilio_whatsapp_number}
             onChange={(e) =>
               setForm({ ...form, twilio_whatsapp_number: e.target.value })
             }
             placeholder="+14155238886"
-            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+            className={fieldClass(!editing)}
           />
         </div>
 
-        <button
-          type="submit"
-          disabled={saving}
-          className="rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
-        >
-          {saving ? "Saving..." : "Save settings"}
-        </button>
+        {editing && (
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              disabled={saving}
+              className="rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
+            >
+              {saving ? "Saving..." : "Save settings"}
+            </button>
+            {hasSavedSettings(saved) && (
+              <button
+                type="button"
+                onClick={cancelEditing}
+                className="rounded-lg border border-zinc-300 px-5 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+        )}
 
         {message && (
           <p
